@@ -49,7 +49,18 @@ void XrpcProvider::Run()
 {
     // 读取配置文件中的RPC服务器IP和端口
     std::string ip = XrpcApplication::GetInstance().GetConfig().Load("rpcserverip");
-    int port = atoi(XrpcApplication::GetInstance().GetConfig().Load("rpcserverport").c_str());
+    // int port = atoi(XrpcApplication::GetInstance().GetConfig().Load("rpcserverport").c_str());
+
+    int port;
+    try
+    {
+        port = static_cast<uint16_t>(std::stoul(XrpcApplication::GetInstance().GetConfig().Load("rpcserverport")));
+    }
+    catch (const std::exception &e)
+    {
+        LOG(ERROR) << "Invaild port : " << XrpcApplication::GetInstance().GetConfig().Load("rpcserverport");
+        return;
+    }
 
     // 使用muduo网络库，创建地址对象
     muduo::net::InetAddress address(ip, port);
@@ -79,8 +90,8 @@ void XrpcProvider::Run()
             // /${service}/${method} = ip:port
             std::string method_path = service_path + "/" + mp.first; // 服务 + 方法名称
             char method_path_data[128] = {0};
-            sprintf(method_path_data, "%s:%d", ip.c_str(), port); // 将IP和端口信息存入节点数据
-
+            // sprintf(method_path_data, "%s:%d", ip.c_str(), port); // 将IP和端口信息存入节点数据
+            snprintf(method_path_data, sizeof(method_path_data), "%s:%d", ip.c_str(), port);
             // ZOO_EPHEMERAL表示这个节点是临时节点，在客户端断开连接后，ZooKeeper会自动删除这个节点
             zkclient.Create(method_path.c_str(), method_path_data, strlen(method_path_data), ZOO_EPHEMERAL);
         }

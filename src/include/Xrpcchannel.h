@@ -4,6 +4,9 @@
 #include <google/protobuf/service.h>
 #include <unistd.h>
 #include "zookeeperutil.h"
+#include <mutex>
+
+constexpr size_t MAX_RESPONSE_LEN = 64 * 1024 * 1024; // 64 MB
 
 /**
  * @brief 此类是继承自google::protobuf::RpcChannel
@@ -39,11 +42,12 @@ private:
     ssize_t recv_exact(int fd, char *buf, size_t size);
 
 private:
+    std::mutex mtx; // 数据互斥锁
     int m_clientfd; // 存放服务端套接字
-    std::string service_name;
-    std::string m_ip;
-    uint16_t m_port;
-    std::string method_name;
+    std::string service_name; // 服务名称
+    std::string m_ip;         // 服务端 ip 地址
+    uint16_t m_port;          // 服务端服务的端口
+    std::string method_name;  // 调用的方法名称
     int m_idx; // 用来划分服务器ip和port的下标
 };
 #endif

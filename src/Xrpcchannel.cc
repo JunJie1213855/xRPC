@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include "XrpcLogger.h"
 
-std::mutex g_data_mutx; // 全局互斥锁，用于保护共享数据的线程安全
+// std::mutex g_data_mutx; // 全局互斥锁，用于保护共享数据的线程安全
 
 // 辅助函数：循环读取直到读够 size 字节
 ssize_t XrpcChannel::recv_exact(int fd, char *buf, size_t size)
@@ -53,7 +53,18 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
         std::string host_data = QueryServiceHost(&zkCli, service_name, method_name, m_idx); // 查询服务地址
         m_ip = host_data.substr(0, m_idx);                                                  // 从查询结果中提取IP地址
         std::cout << "ip: " << m_ip << std::endl;
-        m_port = atoi(host_data.substr(m_idx + 1, host_data.size() - m_idx).c_str()); // 从查询结果中提取端口号
+        // m_port = atoi(host_data.substr(m_idx + 1, host_data.size() - m_idx).c_str()); // 从查询结果中提取端口号
+        std::string port_str = host_data.substr(m_idx + 1, host_data.size() - m_idx);
+        try
+        {
+            m_port = static_cast<uint16_t>(std::stoul(port_str));
+        }
+        catch (const std::exception &e)
+        {
+            LOG(ERROR) << "Invaild port : " << port_str;
+            return;
+        }
+
         std::cout << "port: " << m_port << std::endl;
 
         // 尝试连接服务器
@@ -63,10 +74,7 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
             LOG(ERROR) << "connect server error"; // 连接失败，记录错误日志
             return;
         }
-        else
-        {
-            LOG(INFO) << "connect server success"; // 连接成功，记录日志
-        }
+        LOG(INFO) << "connect server success"; // 连接成功，记录日志
     } // endif
 
     // 2. 序列化请求参数
@@ -103,8 +111,10 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     std::string send_rpc_str;
     send_rpc_str.reserve(4 + 4 + header_size + args_str.size());
 
-    send_rpc_str.append((char *)&net_total_len, 4);
-    send_rpc_str.append((char *)&net_header_len, 4);
+    // send_rpc_str.append((char *)&net_total_len, 4);
+    // send_rpc_str.append((char *)&net_header_len, 4);
+    send_rpc_str.append(reinterpret_cast<char *>(&net_total_len), 4);
+    send_rpc_str.append(reinterpret_cast<char *>(&net_header_len), 4);
     send_rpc_str.append(rpc_header_str);
     send_rpc_str.append(args_str);
 
@@ -122,7 +132,14 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
 
     // A. 先读4字节长度头
     uint32_t response_len = 0;
-    if (recv_exact(m_clientfd, (char *)&response_len, 4) != 4)
+    // if (recv_exact(m_clientfd, (char *)&response_len, 4) != 4)
+    // {
+    //     close(m_clientfd);
+    //     m_clientfd = -1;
+    //     controller->SetFailed("recv response length error");
+    //     return;
+    // }
+    if (recv_exact(m_clientfd, reinterpret_cast<char *>(&response_len), 4) != 4)
     {
         close(m_clientfd);
         m_clientfd = -1;
@@ -130,6 +147,15 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
         return;
     }
     response_len = ntohl(response_len); // 转回主机字节序
+
+    if (response_len > MAX_RESPONSE_LEN)
+    {
+        controller->SetFailed("response length to long, more than 64 MB");
+        close(m_clientfd);
+        m_clientfd = -1;
+        // std::cout << "" << std::endl;
+        return;
+    }
 
     // B. 根据长度读取 响应 Body
     std::vector<char> recv_buf(response_len);
@@ -158,14 +184,15 @@ bool XrpcChannel::newConnect(const char *ip, uint16_t port)
     int clientfd = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == clientfd)
     {
-        char errtxt[512] = {0};
-        std::cout << "socket error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
-        LOG(ERROR) << "socket error:" << errtxt;                                               // 记录错误日志
+        // char errtxt[512] = {0};
+        std::array<char, 512> errtxt{};
+        std::cout << "socket error" << strerror_r(errno, errtxt.data(), sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "socket error:" << errtxt.data();                                               // 记录错误日志
         return false;
     }
 
     // 设置服务器地址信息
-    struct sockaddr_in server_addr;
+    struct sockaddr_in server_addr{};
     server_addr.sin_family = AF_INET;            // IPv4地址族
     server_addr.sin_port = htons(port);          // 端口号
     server_addr.sin_addr.s_addr = inet_addr(ip); // IP地址
@@ -192,7 +219,8 @@ std::string XrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string servic
 
     std::string host_data_1;
     {
-        std::unique_lock<std::mutex> lock(g_data_mutx);                   // 加锁，保证线程安全
+        // std::unique_lock<std::mutex> lock(g_data_mutx);                   // 加锁，保证线程安全
+        std::unique_lock<std::mutex> lock(mtx);
         host_data_1 = std::move(zkclient->GetData(method_path.c_str())); // 从ZooKeeper获取数据 = ip:port
     }
 
@@ -213,7 +241,7 @@ std::string XrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string servic
 }
 
 // 构造函数，支持延迟连接
-XrpcChannel::XrpcChannel(bool connectNow) : m_clientfd(-1), m_idx(0)
+XrpcChannel::XrpcChannel(bool connectNow) : m_clientfd(-1), m_idx(0), m_ip(""), m_port(0)
 {
     if (!connectNow)
     { // 如果不需要立即连接
