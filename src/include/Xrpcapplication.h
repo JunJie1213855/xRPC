@@ -3,6 +3,7 @@
 #include "Xrpcconfig.h"
 #include "Xrpcchannel.h"
 #include "Xrpccontroller.h"
+#include "zkclientpool.h"
 #include <mutex>
 
 /**
@@ -14,7 +15,7 @@ public:
     static void Init(int argc, char **argv);
     static XrpcApplication &GetInstance();
     static Xrpcconfig &GetConfig();
-    ~XrpcApplication() {}
+    ~XrpcApplication();
 
 protected:
     XrpcApplication() {}

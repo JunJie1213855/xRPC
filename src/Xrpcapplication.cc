@@ -1,4 +1,5 @@
 #include "Xrpcapplication.h"
+#include "zkclientpool.h"
 #include <cstdlib>
 #include <unistd.h>
 
@@ -45,6 +46,9 @@ void XrpcApplication::Init(int argc, char **argv)
 
     // 加载配置文件
     m_config.LoadConfigFile(config_file.c_str());
+
+    // 启动 ZooKeeper 连接池
+    ZkClientPool::getInstance().start(4);
 }
 
 // 获取单例对象的引用，保证全局只有一个实例
@@ -60,4 +64,10 @@ XrpcApplication &XrpcApplication::GetInstance()
 Xrpcconfig &XrpcApplication::GetConfig()
 {
     return m_config;
+}
+
+// 析构函数，销毁连接池
+XrpcApplication::~XrpcApplication()
+{
+    ZkClientPool::getInstance().destroy();
 }

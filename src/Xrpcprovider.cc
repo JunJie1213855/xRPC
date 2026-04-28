@@ -3,6 +3,7 @@
 #include "Xrpcheader.pb.h"
 #include "XrpcLogger.h"
 #include <iostream>
+#include "zkclientpool.h"
 
 // 注册服务对象及其方法，以便服务端能够处理客户端的RPC请求
 void XrpcProvider::NotifyService(google::protobuf::Service *service) // 多态
@@ -77,14 +78,23 @@ void XrpcProvider::Run()
 
     // 将当前RPC节点上要发布的服务全部注册到ZooKeeper上，让RPC客户端可以在ZooKeeper上发现服务
     // 因为只需要注册依次服务，所以只需要创建临时的zookeeper客户端就可以了
-    ZkClient zkclient;
-    zkclient.Start(); // 连接ZooKeeper服务器
+
+    // ZkClient zkclient;
+    // zkclient.Start(); // 连接ZooKeeper服务器
+
+    auto Zkclinet = ZkClientPool::getInstance().getConnection();
+
     // service_name为永久节点，method_name为临时节点
     for (auto &sp : service_map)
     {
         // service_name 在ZooKeeper中的目录是"/"+service_name
-        std::string service_path = "/" + sp.first;         // 服务名称，proto中定义的服务名称
-        zkclient.Create(service_path.c_str(), nullptr, 0); // 创建服务节点
+        std::string service_path = "/" + sp.first; // 服务名称，proto中定义的服务名称
+        // zkclient.Create(service_path.c_str(), nullptr, 0); // 创建服务节点
+        if (!Zkclinet->createZnode(service_path.c_str(), nullptr, 0))
+        {
+            return;
+        }
+
         for (auto &mp : sp.second.method_map)
         {
             // /${service}/${method} = ip:port
@@ -93,9 +103,16 @@ void XrpcProvider::Run()
             // sprintf(method_path_data, "%s:%d", ip.c_str(), port); // 将IP和端口信息存入节点数据
             snprintf(method_path_data, sizeof(method_path_data), "%s:%d", ip.c_str(), port);
             // ZOO_EPHEMERAL表示这个节点是临时节点，在客户端断开连接后，ZooKeeper会自动删除这个节点
-            zkclient.Create(method_path.c_str(), method_path_data, strlen(method_path_data), ZOO_EPHEMERAL);
+            // zkclient.Create(method_path.c_str(), method_path_data, strlen(method_path_data), ZOO_EPHEMERAL);
+            
+            if (!Zkclinet->createZnode(method_path.c_str(), method_path_data, sizeof(method_path_data)))
+            {
+                return;
+            }
         }
     }
+
+    ZkClientPool::getInstance().returnConnection(Zkclinet);
 
     // RPC服务端准备启动，打印信息
     std::cout << "RpcProvider start service at ip:" << ip << " port:" << port << std::endl;

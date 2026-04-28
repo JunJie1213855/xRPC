@@ -1,6 +1,6 @@
 #include "Xrpcchannel.h"
 #include "Xrpcheader.pb.h"
-#include "zookeeperutil.h"
+#include "zkclientpool.h"
 #include "Xrpcapplication.h"
 #include "Xrpccontroller.h"
 #include "memory"
@@ -47,13 +47,28 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
         service_name = sd->name();    // 服务名
         method_name = method->name(); // 方法名
 
-        // 客户端需要查询ZooKeeper，找到提供该服务的服务器地址
-        ZkClient zkCli;
-        zkCli.Start();                                                                      // 连接ZooKeeper服务器
-        std::string host_data = QueryServiceHost(&zkCli, service_name, method_name, m_idx); // 查询服务地址
-        m_ip = host_data.substr(0, m_idx);                                                  // 从查询结果中提取IP地址
-        std::cout << "ip: " << m_ip << std::endl;
-        // m_port = atoi(host_data.substr(m_idx + 1, host_data.size() - m_idx).c_str()); // 从查询结果中提取端口号
+        // 从连接池获取 ZooKeeper 连接
+        auto zkConn = ZkClientPool::getInstance().getConnection();
+        if (!zkConn || !zkConn->isConnected())
+        {
+            LOG(ERROR) << "Failed to get ZooKeeper connection from pool";
+            controller->SetFailed("zookeeper connection error");
+            return;
+        }
+
+        std::string host_data = QueryServiceHost(zkConn.get(), service_name, method_name, m_idx); // 查询服务地址
+        ZkClientPool::getInstance().returnConnection(std::move(zkConn));                          // 归还连接
+
+        if (host_data.empty() || host_data == " ")
+        {
+            LOG(ERROR) << "Failed to get service host from ZooKeeper";
+            controller->SetFailed("zookeeper query error");
+            return;
+        }
+
+        m_ip = host_data.substr(0, m_idx); // 从查询结果中提取IP地址
+        LOG(INFO) << "ip: " << m_ip;
+
         std::string port_str = host_data.substr(m_idx + 1, host_data.size() - m_idx);
         try
         {
@@ -61,11 +76,11 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
         }
         catch (const std::exception &e)
         {
-            LOG(ERROR) << "Invaild port : " << port_str;
+            LOG(ERROR) << "Invalid port : " << port_str;
             return;
         }
 
-        std::cout << "port: " << m_port << std::endl;
+        LOG(INFO) << "port: " << m_port;
 
         // 尝试连接服务器
         auto rt = newConnect(m_ip.c_str(), m_port);
@@ -212,16 +227,16 @@ bool XrpcChannel::newConnect(const char *ip, uint16_t port)
 }
 
 // 从ZooKeeper查询服务地址
-std::string XrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string service_name, std::string method_name, int &idx)
+std::string XrpcChannel::QueryServiceHost(ZkConnection *zkconn, const std::string &service_name, const std::string &method_name, int &idx)
 {
     std::string method_path = "/" + service_name + "/" + method_name; // 构造ZooKeeper路径
-    std::cout << "method_path: " << method_path << std::endl;
+    LOG(INFO) << "method_path: " << method_path;
 
     std::string host_data_1;
     {
         // std::unique_lock<std::mutex> lock(g_data_mutx);                   // 加锁，保证线程安全
         std::unique_lock<std::mutex> lock(mtx);
-        host_data_1 = std::move(zkclient->GetData(method_path.c_str())); // 从ZooKeeper获取数据 = ip:port
+        host_data_1 = std::move(zkconn->getData(method_path.c_str())); // 从ZooKeeper获取数据 = ip:port
     }
 
     if (host_data_1 == "")
@@ -241,7 +256,7 @@ std::string XrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string servic
 }
 
 // 构造函数，支持延迟连接
-XrpcChannel::XrpcChannel(bool connectNow) : m_clientfd(-1), m_idx(0), m_ip(""), m_port(0)
+XrpcChannel::XrpcChannel(bool connectNow) : mtx(), m_clientfd(-1), service_name(), m_ip(), m_port(0), method_name(), m_idx(0)
 {
     if (!connectNow)
     { // 如果不需要立即连接

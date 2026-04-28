@@ -3,7 +3,7 @@
 
 #include <google/protobuf/service.h>
 #include <unistd.h>
-#include "zookeeperutil.h"
+#include "zkclientpool.h"
 #include <mutex>
 
 constexpr size_t MAX_RESPONSE_LEN = 64 * 1024 * 1024; // 64 MB
@@ -34,8 +34,8 @@ private:
     // 根据ip和port保存客户端的连接信息，也就是说 channel
     bool newConnect(const char *ip, uint16_t port);
 
-    // 
-    std::string QueryServiceHost(ZkClient *zkclient, std::string service_name, std::string method_name, int &idx);
+    //
+    std::string QueryServiceHost(ZkConnection* zkconn, const std::string& service_name, const std::string& method_name, int &idx);
 
 
     // 新增：确保读取指定长度的数据，解决TCP拆包
