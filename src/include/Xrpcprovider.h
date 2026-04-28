@@ -1,7 +1,6 @@
 #ifndef _Xrpcprovider_H__
 #define _Xrpcprovider_H__
 #include "google/protobuf/service.h"
-#include "zookeeperutil.h"
 #include <muduo/net/TcpServer.h>
 #include <muduo/net/EventLoop.h>
 #include <muduo/net/InetAddress.h>

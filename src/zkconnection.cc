@@ -5,6 +5,7 @@
 
 // 连接上下文，用于在 watcher 回调中传递信息
 // 生命周期由 ZkConnection 对象管理，在 connect() 调用期间有效
+// zookeeper_init 会使用
 struct ConnectionContext
 {
     std::mutex mutex;
@@ -12,7 +13,7 @@ struct ConnectionContext
     bool connected = false;
 };
 
-// ZooKeeper watcher 回调函数
+// ZooKeeper watcher 回调函数,  zookeeper_init 时使用
 void connection_watcher(zhandle_t *zh, int type, int state,
               const char *path, void *context)
 {
@@ -78,11 +79,12 @@ bool ZkConnection::connect(const std::string &host, int timeout_ms)
         while (!ctx.connected)
         {
             auto remaining = deadline - std::chrono::steady_clock::now();
-            if (remaining <= std::chrono::milliseconds(0))
+            if (remaining <= std::chrono::milliseconds(0)) // 超时直接跳出循环，关闭连接
             {
                 break;
             }
             // 使用 wait_for 等待，带超时
+            // 等待成功或者超时
             ctx.cv.wait_for(lock, remaining);
         }
 

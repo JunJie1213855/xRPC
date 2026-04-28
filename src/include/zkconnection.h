@@ -28,9 +28,10 @@ public:
     // 关闭连接
     void close();
 
+    // 创建节点 znode
     bool createZnode(const char *path, const char *data, int datalen, int state = 0);
 
-    // 获取节点数据
+    // 获取节点 znode 数据
     std::string getData(const char *path);
 
     // 状态查询
