@@ -1,0 +1,24 @@
+# Build outputs
+build/
+bin/
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Generated protobuf files
+*.pb.cc
+*.pb.h
+
+# Project specific
+CLAUDE.md
+olddoc
+.claude
