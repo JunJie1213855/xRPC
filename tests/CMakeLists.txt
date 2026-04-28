@@ -6,6 +6,10 @@ set(TEST_SOURCES
     test_fixture.h
     zkconnection_test.cc
     zkclientpool_test.cc
+    Xrpcconfig_test.cc
+    Xrpccontroller_test.cc
+    Xrpcchannel_test.cc
+    Xrpcapplication_test.cc
 )
 
 # 创建测试可执行文件
