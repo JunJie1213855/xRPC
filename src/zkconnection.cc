@@ -105,6 +105,11 @@ bool ZkConnection::connect(const std::string &host, int timeout_ms)
 
 bool ZkConnection::createZnode(const char *path, const char *data, int datalen, int state)
 {
+    if (m_zhandle == nullptr || !m_connected.load())
+    {
+        LOG(ERROR) << "createZnode: not connected";
+        return false;
+    }
 
     char path_buffer[128]; // 用于存储创建的节点路径
     int bufferlen = sizeof(path_buffer);
