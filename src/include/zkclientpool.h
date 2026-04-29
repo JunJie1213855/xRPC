@@ -70,7 +70,8 @@ private:
     std::condition_variable m_cv;
     bool m_running;
 
-    std::thread *m_healthCheckThread; // 健康检查线程
+    // std::thread *m_healthCheckThread; // 健康检查线程
+    std::unique_ptr<std::thread> m_healthCheckThread;
 
     std::string m_zkHost; // ZooKeeper 主机地址
 };

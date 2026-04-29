@@ -30,15 +30,16 @@ void XrpcProvider::NotifyService(google::protobuf::Service *service) // 多态
     int method_count = psd->method_count();
 
     // 打印服务名
-    std::cout << "service_name=" << service_name << std::endl;
-
+    // std::cout << "service_name=" << service_name << std::endl;
+    LOG(INFO) << "service_name=" << service_name;
     // 遍历服务中的所有方法，并注册到服务信息中
     for (int i = 0; i < method_count; ++i)
     {
         // 获取服务中的方法描述
         const google::protobuf::MethodDescriptor *pmd = psd->method(i);
         std::string method_name = pmd->name();
-        std::cout << "method_name=" << method_name << std::endl;
+        // std::cout << "method_name=" << method_name << std::endl;
+        LOG(INFO) << "method_name=" << method_name;
         service_info.method_map.emplace(method_name, pmd); // 将方法名和方法描述符存入map
     }
     service_info.service = service;                  // 保存服务对象
@@ -104,7 +105,7 @@ void XrpcProvider::Run()
             snprintf(method_path_data, sizeof(method_path_data), "%s:%d", ip.c_str(), port);
             // ZOO_EPHEMERAL表示这个节点是临时节点，在客户端断开连接后，ZooKeeper会自动删除这个节点
             // zkclient.Create(method_path.c_str(), method_path_data, strlen(method_path_data), ZOO_EPHEMERAL);
-            
+
             if (!Zkclinet->createZnode(method_path.c_str(), method_path_data, sizeof(method_path_data)))
             {
                 return;
@@ -115,8 +116,8 @@ void XrpcProvider::Run()
     ZkClientPool::getInstance().returnConnection(Zkclinet);
 
     // RPC服务端准备启动，打印信息
-    std::cout << "RpcProvider start service at ip:" << ip << " port:" << port << std::endl;
-
+    // std::cout << "RpcProvider start service at ip:" << ip << " port:" << port << std::endl;
+    LOG(INFO) << "RpcProvider start service at ip:" << ip << " port:" << port;
     // 启动网络服务
     server->start();
     event_loop.loop(); // 进入事件循环
@@ -135,8 +136,8 @@ void XrpcProvider::OnConnection(const muduo::net::TcpConnectionPtr &conn)
 // 消息回调函数，处理客户端发送的RPC请求
 void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net::Buffer *buffer, muduo::Timestamp receive_time)
 {
-    std::cout << "OnMessage" << std::endl;
-
+    // std::cout << "OnMessage" << std::endl;
+    LOG(INFO) << "OnMessage";
     // [4 byte total len] + [4 byte header len = h] + [h byte data = service_name + method_name] + [n - h - 4 byte data = args]
     // 循环处理缓冲区，解决粘包问题
     while (buffer->readableBytes() >= 4)
@@ -184,7 +185,8 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         // 4. 业务逻辑处理
         if (!krpcHeader.ParseFromString(rpc_header_str)) // 反序列化
         {
-            std::cout << "header parse error" << std::endl;
+            // std::cout << "header parse error" << std::endl;
+            LOG(ERROR) << "header parse error";
             return;
         }
 
@@ -195,13 +197,15 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         auto it = service_map.find(service_name); // 先找到提供服务的 服务器名称
         if (it == service_map.end())
         {
-            std::cout << service_name << " is not exist!" << std::endl;
+            // std::cout << service_name << " is not exist!" << std::endl;
+            LOG(ERROR) << service_name << " is not exist!";
             return;
         }
         auto mit = it->second.method_map.find(method_name); // 再找到对应的方法名称
         if (mit == it->second.method_map.end())
         {
-            std::cout << service_name << "." << method_name << " is not exist!" << std::endl;
+            // std::cout << service_name << "." << method_name << " is not exist!" << std::endl;
+            LOG(ERROR) << "." << method_name << " is not exist!" ;
             return;
         }
 
@@ -211,7 +215,8 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         auto request = std::unique_ptr<google::protobuf::Message>(service->GetRequestPrototype(method).New()); // 从服务中构造请求对象
         if (!request->ParseFromString(args_str))                                                               // 解析参数
         {
-            std::cout << "request parse error" << std::endl;
+            // std::cout << "request parse error" << std::endl;
+            LOG(ERROR) << "request parse error";
             return;
         }
         // google::protobuf::Message *response = service->GetResponsePrototype(method).New(); // 从服务中构造响应对象
@@ -248,13 +253,15 @@ void XrpcProvider::SendRpcResponse(const muduo::net::TcpConnectionPtr &conn, goo
     }
     else
     {
-        std::cout << "serialize response error!" << std::endl;
+        LOG(ERROR) << "serialize response error!";
+        // std::cout << "serialize response error!" << std::endl;
     }
 }
 
 // 析构函数，退出事件循环
 XrpcProvider::~XrpcProvider()
 {
-    std::cout << "~XrpcProvider()" << std::endl;
+    // std::cout << "~XrpcProvider()" << std::endl;
+    LOG(INFO) << "~XrpcProvider()";
     event_loop.quit(); // 退出事件循环
 }

@@ -6,6 +6,7 @@
 #include "zkclientpool.h"
 #include <mutex>
 
+// 最大响应回包大小
 constexpr size_t MAX_RESPONSE_LEN = 64 * 1024 * 1024; // 64 MB
 
 /**
@@ -16,6 +17,10 @@ constexpr size_t MAX_RESPONSE_LEN = 64 * 1024 * 1024; // 64 MB
  */
 class XrpcChannel : public google::protobuf::RpcChannel
 {
+public:
+    XrpcChannel(const XrpcChannel &) = delete;
+    XrpcChannel &operator=(const XrpcChannel &) = delete;
+
 public:
     XrpcChannel(bool connectNow);
     virtual ~XrpcChannel()
@@ -34,20 +39,19 @@ private:
     // 根据ip和port保存客户端的连接信息，也就是说 channel
     bool newConnect(const char *ip, uint16_t port);
 
-    //
-    std::string QueryServiceHost(ZkConnection* zkconn, const std::string& service_name, const std::string& method_name, int &idx);
-
+    // 获取服务的地址 ip:port
+    std::string QueryServiceHost(ZkConnection *zkconn, const std::string &service_name, const std::string &method_name, int &idx);
 
     // 新增：确保读取指定长度的数据，解决TCP拆包
     ssize_t recv_exact(int fd, char *buf, size_t size);
 
 private:
-    std::mutex mtx; // 数据互斥锁
-    int m_clientfd; // 存放服务端套接字
+    std::mutex mtx;           // 数据互斥锁
+    int m_clientfd;           // 存放服务端套接字
     std::string service_name; // 服务名称
     std::string m_ip;         // 服务端 ip 地址
     uint16_t m_port;          // 服务端服务的端口
     std::string method_name;  // 调用的方法名称
-    int m_idx; // 用来划分服务器ip和port的下标
+    int m_idx;                // 用来划分服务器ip和port的下标
 };
 #endif

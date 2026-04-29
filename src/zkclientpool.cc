@@ -55,7 +55,9 @@ void ZkClientPool::start(int initialSize)
               << " connections";
 
     // 启动健康检查线程
-    m_healthCheckThread = new std::thread(&ZkClientPool::healthCheckLoop, this);
+    // m_healthCheckThread = new std::thread(&ZkClientPool::healthCheckLoop, this);
+    // m_healthCheckThread = std::make_unique<std::thread>(&ZkClientPool::healthCheckLoop, this);
+    m_healthCheckThread.reset(new std::thread(&ZkClientPool::healthCheckLoop, this));
 }
 
 void ZkClientPool::destroy()
@@ -76,7 +78,7 @@ void ZkClientPool::destroy()
     if (m_healthCheckThread && m_healthCheckThread->joinable())
     {
         m_healthCheckThread->join();
-        delete m_healthCheckThread;
+        // delete m_healthCheckThread;
         m_healthCheckThread = nullptr;
     }
 

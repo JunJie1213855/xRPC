@@ -11,8 +11,6 @@
 #include <arpa/inet.h>
 #include "XrpcLogger.h"
 
-// std::mutex g_data_mutx; // 全局互斥锁，用于保护共享数据的线程安全
-
 // 辅助函数：循环读取直到读够 size 字节
 ssize_t XrpcChannel::recv_exact(int fd, char *buf, size_t size)
 {
@@ -126,8 +124,6 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     std::string send_rpc_str;
     send_rpc_str.reserve(4 + 4 + header_size + args_str.size());
 
-    // send_rpc_str.append((char *)&net_total_len, 4);
-    // send_rpc_str.append((char *)&net_header_len, 4);
     send_rpc_str.append(reinterpret_cast<char *>(&net_total_len), 4);
     send_rpc_str.append(reinterpret_cast<char *>(&net_header_len), 4);
     send_rpc_str.append(rpc_header_str);
@@ -147,13 +143,6 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
 
     // A. 先读4字节长度头
     uint32_t response_len = 0;
-    // if (recv_exact(m_clientfd, (char *)&response_len, 4) != 4)
-    // {
-    //     close(m_clientfd);
-    //     m_clientfd = -1;
-    //     controller->SetFailed("recv response length error");
-    //     return;
-    // }
     if (recv_exact(m_clientfd, reinterpret_cast<char *>(&response_len), 4) != 4)
     {
         close(m_clientfd);
@@ -201,8 +190,8 @@ bool XrpcChannel::newConnect(const char *ip, uint16_t port)
     {
         // char errtxt[512] = {0};
         std::array<char, 512> errtxt{};
-        std::cout << "socket error" << strerror_r(errno, errtxt.data(), sizeof(errtxt)) << std::endl; // 打印错误信息
-        LOG(ERROR) << "socket error:" << errtxt.data();                                               // 记录错误日志
+        // std::cout << "socket error" << strerror_r(errno, errtxt.data(), sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "socket error:" << strerror_r(errno, errtxt.data(), sizeof(errtxt)); // 记录错误日志
         return false;
     }
 
@@ -217,8 +206,8 @@ bool XrpcChannel::newConnect(const char *ip, uint16_t port)
     {
         close(clientfd); // 连接失败，关闭socket
         char errtxt[512] = {0};
-        std::cout << "connect error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
-        LOG(ERROR) << "connect server error" << errtxt;                                         // 记录错误日志
+        // std::cout << "connect error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "connect server error" << strerror_r(errno, errtxt, sizeof(errtxt)); // 记录错误日志
         return false;
     }
 
@@ -234,7 +223,6 @@ std::string XrpcChannel::QueryServiceHost(ZkConnection *zkconn, const std::strin
 
     std::string host_data_1;
     {
-        // std::unique_lock<std::mutex> lock(g_data_mutx);                   // 加锁，保证线程安全
         std::unique_lock<std::mutex> lock(mtx);
         host_data_1 = std::move(zkconn->getData(method_path.c_str())); // 从ZooKeeper获取数据 = ip:port
     }
@@ -268,6 +256,12 @@ XrpcChannel::XrpcChannel(bool connectNow) : mtx(), m_clientfd(-1), service_name(
     int count = 3; // 重试次数
     while (!rt && count--)
     {
+        LOG(INFO) << "try reconnect to server, time : " << count;
         rt = newConnect(m_ip.c_str(), m_port);
     }
+    
+    if (rt)
+        LOG(INFO) << "reconnect to server successfully " << count;
+    else
+        LOG(ERROR) << "reconnect to server failed " << count;
 }

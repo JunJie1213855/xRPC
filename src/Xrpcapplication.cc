@@ -2,6 +2,7 @@
 #include "zkclientpool.h"
 #include <cstdlib>
 #include <unistd.h>
+#include "XrpcLogger.h"
 
 /**
  * @brief
@@ -17,7 +18,8 @@ void XrpcApplication::Init(int argc, char **argv)
 {
     if (argc < 2)
     { // 如果命令行参数少于2个，说明没有指定配置文件
-        std::cout << "格式: command -i <配置文件路径>" << std::endl;
+        // std::cout << "格式: command -i <配置文件路径>" << std::endl;
+        LOG(INFO) << "格式: command -i <配置文件路径>";
         exit(EXIT_FAILURE); // 退出程序
     }
 
@@ -32,11 +34,13 @@ void XrpcApplication::Init(int argc, char **argv)
             config_file = optarg; // 将配置文件路径保存到config_file
             break;
         case '?': // 如果出现未知参数（不是-i），提示正确格式并退出
-            std::cout << "格式: command -i <配置文件路径>" << std::endl;
+            // std::cout << "格式: command -i <配置文件路径>" << std::endl;
+            LOG(INFO) << "格式: command -i <配置文件路径>";
             exit(EXIT_FAILURE);
             break;
         case ':': // 如果-i后面没有跟参数，提示正确格式并退出
-            std::cout << "格式: command -i <配置文件路径>" << std::endl;
+            // std::cout << "格式: command -i <配置文件路径>" << std::endl;
+            LOG(INFO) << "格式: command -i <配置文件路径>";
             exit(EXIT_FAILURE);
             break;
         default:
