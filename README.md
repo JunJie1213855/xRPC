@@ -6,6 +6,7 @@
 
 - **高性能**: 基于 Muduo Reactor 网络模型，支持高并发 TCP 连接
 - **服务发现**: 集成 ZooKeeper 实现服务的自动注册与发现
+- **连接池**: ZooKeeper 连接池复用，显著降低连接开销
 - **序列化**: 使用 Protobuf 进行高效的数据序列化/反序列化
 - **多线程**: 支持多线程事件循环，处理高并发请求
 - **粘包处理**: 自定义协议解决 TCP 粘包问题
@@ -22,19 +23,29 @@ xRPC/
 │   │   ├── Xrpcconfig.h    # 配置加载器
 │   │   ├── Xrpccontroller.h # RPC 控制器
 │   │   ├── XrpcLogger.h   # 日志封装
-│   │   └── zookeeperutil.h # ZooKeeper 客户端
+│   │   ├── zkconnection.h  # ZooKeeper 连接封装
+│   │   └── zkclientpool.h  # ZooKeeper 连接池
 │   ├── Xrpcprovider.cc     # 服务端实现
 │   ├── Xrpcchannel.cc      # 客户端通道实现
 │   ├── Xrpcapplication.cc  # 应用初始化
 │   ├── Xrpcconfig.cc       # 配置解析
 │   ├── Xrpccontroller.cc  # 控制器实现
-│   ├── zookeeperutil.cc    # ZooKeeper 封装
+│   ├── zkconnection.cc     # ZooKeeper 连接实现
+│   ├── zkclientpool.cc     # 连接池实现
 │   └── Xrpcheader.proto    # RPC 协议头定义
 ├── example/                # 示例代码
 │   ├── callee/             # 服务端示例
 │   │   └── Xserver.cc      # 用户服务提供者
 │   └── caller/             # 客户端示例
 │       └── Xclient.cc      # RPC 调用客户端
+├── tests/                  # 单元测试
+│   ├── CMakeLists.txt
+│   ├── zkconnection_test.cc
+│   ├── zkclientpool_test.cc
+│   ├── Xrpcconfig_test.cc
+│   ├── Xrpccontroller_test.cc
+│   ├── Xrpcchannel_test.cc
+│   └── Xrpcapplication_test.cc
 ├── bin/                    # 编译输出目录
 │   ├── server              # 服务端可执行文件
 │   ├── client              # 客户端可执行文件
@@ -53,7 +64,8 @@ xRPC/
 | `XrpcChannel` | `Xrpcchannel.cc` | RPC 客户端通道，负责向服务端发送请求并接收响应 |
 | `XrpcApplication` | `Xrpcapplication.cc` | 应用单例类，负责框架初始化和配置管理 |
 | `XrpcConfig` | `Xrpcconfig.cc` | 配置文件加载器，解析 `.conf` 格式的配置文件 |
-| `ZkClient` | `zookeeperutil.cc` | ZooKeeper 客户端封装，负责服务注册与发现 |
+| `ZkConnection` | `zkconnection.cc` | ZooKeeper 连接封装，管理 zhandle_t 生命周期 |
+| `ZkClientPool` | `zkclientpool.cc` | ZooKeeper 连接池单例，实现连接复用和健康检查 |
 
 ### 通信协议
 
@@ -73,7 +85,9 @@ xRPC/
 ```
 NotifyService(UserService)
     → 从 protobuf Service 提取 descriptor
+    → 从连接池获取 ZooKeeper 连接
     → 将所有方法注册到 ZooKeeper (/UserService/Login → host:port)
+    → 归还连接到连接池
     → 启动 Muduo TcpServer
     → OnMessage: 解析 XrpcHeader → 反序列化参数 → CallMethod → SendRpcResponse
 ```
@@ -81,12 +95,22 @@ NotifyService(UserService)
 ### 服务发现流程（客户端）
 
 ```
-XrpcChannel::QueryServiceHost(zkclient, service_name, method_name)
+XrpcChannel::QueryServiceHost(zkconn, service_name, method_name)
+    → 从连接池获取 ZooKeeper 连接
     → ZooKeeper 查询 /UserService/Login
     → 返回 host:port 字符串，解析为 IP 和端口
+    → 归还连接到连接池
     → newConnect(ip, port) 建立 TCP 连接
     → CallMethod 序列化请求 → 发送 → 等待响应
 ```
+
+### ZooKeeper 连接池
+
+`ZkClientPool` 实现单例模式，管理 ZooKeeper 连接的生命周期：
+
+- **连接复用**: 从池中获取/归还连接，避免频繁创建/销毁
+- **健康检查**: 后台线程定期清理过期连接
+- **线程安全**: 使用 mutex 和 condition_variable 保护共享状态
 
 ## 依赖
 
@@ -110,6 +134,16 @@ cmake ..
 
 # 编译
 make -j$(nproc)
+```
+
+### 运行测试
+
+```bash
+# 运行单元测试
+cd build/tests && ./zk_test
+
+# 查看测试覆盖
+ctest --output-on-failure
 ```
 
 ### 配置
@@ -213,17 +247,25 @@ int main(int argc, char** argv) {
 }
 ```
 
-## 性能测试
+## 单元测试
 
-客户端默认配置：
-- 100 个并发线程
-- 每线程 5000 次请求
+项目使用 GoogleTest 进行单元测试：
 
-运行后输出：
-- 总请求数
-- 成功/失败计数
-- 耗时
-- QPS（每秒请求数）
+| 测试文件 | 测试内容 |
+|---------|---------|
+| `zkconnection_test.cc` | ZkConnection 构造函数、连接状态、getData、createZnode |
+| `zkclientpool_test.cc` | ZkClientPool 单例、初始状态、销毁 |
+| `Xrpcconfig_test.cc` | 配置加载、键查找、空白字符修剪 |
+| `Xrpccontroller_test.cc` | 失败状态、错误文本、Reset |
+| `Xrpcchannel_test.cc` | 构造函数 |
+| `Xrpcapplication_test.cc` | 单例获取 |
+
+运行测试：
+
+```bash
+cd build/tests
+./zk_test
+```
 
 ## 协议细节
 
