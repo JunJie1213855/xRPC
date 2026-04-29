@@ -19,7 +19,7 @@ add_executable(zk_test ${TEST_SOURCES})
 target_link_libraries(zk_test
     /usr/lib/x86_64-linux-gnu/libgtest.a
     /usr/lib/x86_64-linux-gnu/libgtest_main.a
-    krpc_core
+    xrpc_core
     pthread
     zookeeper_mt
     glog
