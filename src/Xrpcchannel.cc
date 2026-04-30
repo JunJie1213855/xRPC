@@ -98,13 +98,13 @@ void XrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     }
 
     // 3. 构建协议头
-    Xrpc::RpcHeader krpcheader;
-    krpcheader.set_service_name(service_name);
-    krpcheader.set_method_name(method_name);
-    krpcheader.set_args_size(args_str.size());
+    Xrpc::RpcHeader xrpcheader;
+    xrpcheader.set_service_name(service_name);
+    xrpcheader.set_method_name(method_name);
+    xrpcheader.set_args_size(args_str.size());
 
     std::string rpc_header_str;
-    if (!krpcheader.SerializeToString(&rpc_header_str))
+    if (!xrpcheader.SerializeToString(&rpc_header_str))
     {
         controller->SetFailed("serialize rpc header error!");
         return;

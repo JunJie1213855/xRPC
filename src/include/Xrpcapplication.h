@@ -7,7 +7,7 @@
 #include <mutex>
 
 /**
- * @brief Krpc基础类，负责框架的一些初始化操作，初始化全局config类，保持云config类
+ * @brief Xrpc基础类，负责框架的一些初始化操作，初始化全局config类，保持云config类
  */
 class XrpcApplication : public std::enable_shared_from_this<XrpcApplication>
 {
