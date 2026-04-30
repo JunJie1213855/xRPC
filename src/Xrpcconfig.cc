@@ -57,18 +57,18 @@ std::string Xrpcconfig::Load(const std::string &key)
     return it->second; // 返回对应的value
 }
 
-// 去掉字符串前后的空格
+// 去掉字符串前后的空格和制表符
 void Xrpcconfig::Trim(std::string &read_buf)
 {
-    // 去掉字符串前面的空格
-    int index = read_buf.find_first_not_of(' ');
+    // 去掉字符串前面的空格和制表符
+    int index = read_buf.find_first_not_of(" \t");
     if (index != -1)
     {                                                               // 如果找到非空格字符
         read_buf = read_buf.substr(index, read_buf.size() - index); // 截取字符串
     }
 
-    // 去掉字符串后面的空格
-    index = read_buf.find_last_not_of(' ');
+    // 去掉字符串后面的空格和制表符
+    index = read_buf.find_last_not_of(" \t");
     if (index != -1)
     {                                             // 如果找到非空格字符
         read_buf = read_buf.substr(0, index + 1); // 截取字符串

@@ -44,3 +44,62 @@ TEST(ZkConnectionTest, CreateZnodeWithoutConnection) {
     bool result = conn.createZnode("/test", "data", 4);
     EXPECT_FALSE(result);
 }
+
+// ============ Edge Case Tests ============
+
+TEST(ZkConnectionTest, DoubleClose) {
+    ZkConnection conn;
+    conn.close();
+    conn.close();  // 多次 close 不应崩溃
+    EXPECT_FALSE(conn.isConnected());
+}
+
+TEST(ZkConnectionTest, GetHandleWithoutConnection) {
+    ZkConnection conn;
+    // 未连接时 getHandle 返回 nullptr
+    EXPECT_TRUE(conn.getHandle() == nullptr);
+}
+
+TEST(ZkConnectionTest, CreateZnodeWithEmptyPath) {
+    ZkConnection conn;
+    // 空路径不应导致崩溃（具体行为取决于实现）
+    bool result = conn.createZnode("", "data", 4);
+    EXPECT_FALSE(result);  // 未连接时应该返回 false
+}
+
+TEST(ZkConnectionTest, CreateZnodeWithNullData) {
+    ZkConnection conn;
+    // nullptr data 不应导致崩溃
+    bool result = conn.createZnode("/test", nullptr, 0);
+    EXPECT_FALSE(result);
+}
+
+TEST(ZkConnectionTest, GetDataWithEmptyPath) {
+    ZkConnection conn;
+    std::string result = conn.getData("");
+    // 未连接时应该返回空字符串
+    EXPECT_EQ(result, "");
+}
+
+TEST(ZkConnectionTest, CreateZnodeWithEmptyData) {
+    ZkConnection conn;
+    // 空数据创建节点
+    bool result = conn.createZnode("/test", "", 0);
+    EXPECT_FALSE(result);  // 未连接时应该返回 false
+}
+
+TEST(ZkConnectionTest, CreateZnodeWithZeroLen) {
+    ZkConnection conn;
+    // 数据长度为0
+    bool result = conn.createZnode("/test", "data", 0);
+    EXPECT_FALSE(result);
+}
+
+TEST(ZkConnectionTest, MultipleRapidClose) {
+    ZkConnection conn;
+    // 快速多次 close 不应崩溃
+    conn.close();
+    conn.close();
+    conn.close();
+    EXPECT_FALSE(conn.isConnected());
+}
