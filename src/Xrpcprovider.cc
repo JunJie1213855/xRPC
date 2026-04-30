@@ -173,7 +173,7 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         //======================================== 读取远程调用信息 服务名称 + 方法 ========================================
         // 读取 Header 数据 = 服务 + 方法名称 + 参数个数
         std::string rpc_header_str(buffer->peek(), header_len);
-        Xrpc::RpcHeader krpcHeader;
+        Xrpc::RpcHeader xrpcHeader;
         buffer->retrieve(header_len); // 消耗掉 header data
 
         //======================================== 读取参数数据（序列化后的） ========================================
@@ -183,7 +183,7 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         buffer->retrieve(args_size); // 消耗掉 body data
 
         // 4. 业务逻辑处理
-        if (!krpcHeader.ParseFromString(rpc_header_str)) // 反序列化
+        if (!xrpcHeader.ParseFromString(rpc_header_str)) // 反序列化
         {
             // std::cout << "header parse error" << std::endl;
             LOG(ERROR) << "header parse error";
@@ -191,8 +191,8 @@ void XrpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::ne
         }
 
         //======================================== 服务 + 方法 ========================================
-        std::string service_name = krpcHeader.service_name();
-        std::string method_name = krpcHeader.method_name();
+        std::string service_name = xrpcHeader.service_name();
+        std::string method_name = xrpcHeader.method_name();
 
         auto it = service_map.find(service_name); // 先找到提供服务的 服务器名称
         if (it == service_map.end())

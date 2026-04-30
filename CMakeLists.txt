@@ -1,6 +1,6 @@
 #设置最低版本和项目名称
 cmake_minimum_required(VERSION 3.0)
-project(Krpc)
+project(Xrpc)
 
 #设置全局的C++标准
 set(CMAKE_CXX_STANDARD 14)#在这里我设置了11，代表使用c++11标准
