@@ -6,6 +6,9 @@ project(Krpc)
 set(CMAKE_CXX_STANDARD 14)#在这里我设置了11，代表使用c++11标准
 set(CMAKE_CXX_STANDARD_REQUIRED True)#CMAKE_CXX_STANDARD_REQUIRED表示强制使用指定的标准
 
+# ZooKeeper多线程版本需要THREADED定义
+add_definitions(-DTHREADED)
+
 #设置头文件目录，供所有子项目使用
 #include_directories(${CMAKE_SOURCE_DIR}/src/include) #其中CMAKE_SOURCE_DIR表示当前目录
 

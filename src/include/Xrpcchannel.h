@@ -3,8 +3,10 @@
 
 #include <google/protobuf/service.h>
 #include <unistd.h>
-#include "zkclientpool.h"
+#include <array>
 #include <mutex>
+#include "zkclientpool.h"
+
 
 // 最大响应回包大小
 constexpr size_t MAX_RESPONSE_LEN = 64 * 1024 * 1024; // 64 MB

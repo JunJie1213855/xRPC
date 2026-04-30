@@ -1,5 +1,5 @@
-#ifndef KRPC_LOG_H
-#define KRPC_LOG_H
+#ifndef _XrpcLogger_H__
+#define _XrpcLogger_H__
 
 #include <glog/logging.h>
 #include <string>

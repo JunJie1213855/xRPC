@@ -4,12 +4,11 @@
 #include "Xrpcapplication.h"
 #include "Xrpccontroller.h"
 #include "memory"
+#include "XrpcLogger.h"
 #include <errno.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
-#include "XrpcLogger.h"
 
 // 辅助函数：循环读取直到读够 size 字节
 ssize_t XrpcChannel::recv_exact(int fd, char *buf, size_t size)
@@ -189,7 +188,7 @@ bool XrpcChannel::newConnect(const char *ip, uint16_t port)
     if (-1 == clientfd)
     {
         // char errtxt[512] = {0};
-        std::array<char, 512> errtxt{};
+        std::array<char, 512> errtxt{0};
         // std::cout << "socket error" << strerror_r(errno, errtxt.data(), sizeof(errtxt)) << std::endl; // 打印错误信息
         LOG(ERROR) << "socket error:" << strerror_r(errno, errtxt.data(), sizeof(errtxt)); // 记录错误日志
         return false;
@@ -259,7 +258,7 @@ XrpcChannel::XrpcChannel(bool connectNow) : mtx(), m_clientfd(-1), service_name(
         LOG(INFO) << "try reconnect to server, time : " << count;
         rt = newConnect(m_ip.c_str(), m_port);
     }
-    
+
     if (rt)
         LOG(INFO) << "reconnect to server successfully " << count;
     else
