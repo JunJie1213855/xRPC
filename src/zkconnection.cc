@@ -114,21 +114,36 @@ bool ZkConnection::createZnode(const char *path, const char *data, int datalen, 
     char path_buffer[128]; // 用于存储创建的节点路径
     int bufferlen = sizeof(path_buffer);
 
-    // 检查节点是否已经存在
     int flag = zoo_exists(m_zhandle, path, 0, nullptr);
     if (flag == ZNONODE)
-    { // 如果节点不存在
-        // 创建指定的ZooKeeper节点
-        flag = zoo_create(m_zhandle, path, data, datalen, &ZOO_OPEN_ACL_UNSAFE, state, path_buffer, bufferlen);
+    {
+        // 节点不存在，按指定模式创建
+        flag = zoo_create(m_zhandle, path, data, datalen,
+                          &ZOO_OPEN_ACL_UNSAFE, state, path_buffer, bufferlen);
         if (flag == ZOK)
-        { // 创建成功
+        {
             LOG(INFO) << "znode create success... path:" << path;
+            return true;
         }
-        else
-        { // 创建失败
-            LOG(ERROR) << "znode create failed... path:" << path;
-            return false; // 退出程序
+        LOG(ERROR) << "znode create failed... path:" << path
+                   << " rc=" << flag;
+        return false;
+    }
+
+    // 节点已存在：用 zoo_set 覆盖数据。
+    // 这样 server 重启后注册的新 ip:port 可以替换旧值，
+    // 避免 createZnode-only 时旧数据残留导致客户端连接到不存在的端点。
+    // 若节点是其他会话创建的临时节点且属于不同 session，zoo_set 会失败 (ZNOAUTH 等)，
+    // 这种情况下数据不会被改写，调用方应自行决定是否容忍。
+    if (data != nullptr && datalen > 0)
+    {
+        int rc = zoo_set(m_zhandle, path, data, datalen, /*version=*/-1);
+        if (rc != ZOK)
+        {
+            LOG(ERROR) << "znode set failed... path:" << path << " rc=" << rc;
+            return false;
         }
+        LOG(INFO) << "znode update success... path:" << path;
     }
     return true;
 }

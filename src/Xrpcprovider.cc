@@ -1,6 +1,7 @@
 #include "Xrpcprovider.h"
 
 #include <arpa/inet.h>
+#include <zookeeper/zookeeper.h>
 
 #include <array>
 #include <cstring>
@@ -67,10 +68,17 @@ bool XrpcProvider::RegisterToZookeeper(const std::string &ip, uint16_t port)
         {
             std::string method_path = service_path + "/" + mp.first;
             char method_path_data[128] = {0};
-            std::snprintf(method_path_data, sizeof(method_path_data), "%s:%u",
-                          ip.c_str(), static_cast<unsigned>(port));
+            int written = std::snprintf(method_path_data, sizeof(method_path_data),
+                                        "%s:%u", ip.c_str(),
+                                        static_cast<unsigned>(port));
+            if (written <= 0)
+            {
+                ZkClientPool::getInstance().returnConnection(zkclient);
+                return false;
+            }
+            // 临时节点：server 进程退出/session 超时后 zk 自动清理，避免脏注册
             if (!zkclient->createZnode(method_path.c_str(), method_path_data,
-                                       sizeof(method_path_data)))
+                                       written, ZOO_EPHEMERAL))
             {
                 ZkClientPool::getInstance().returnConnection(zkclient);
                 return false;
@@ -128,18 +136,7 @@ void XrpcProvider::Run()
 
     LOG(INFO) << "RpcProvider start service at ip:" << ip << " port:" << port;
     acceptor_ioc_->run();
-
-    // 4. 清理 worker
-    for (auto &g : guards_)
-    {
-        if (g)
-            g->reset();
-    }
-    for (auto &t : worker_threads_)
-    {
-        if (t.joinable())
-            t.join();
-    }
+    // 清理工作统一由析构函数完成，避免与外部 stop()/dtor 路径竞态。
 }
 
 asio::awaitable<void> XrpcProvider::AcceptLoop(std::string ip, uint16_t port)

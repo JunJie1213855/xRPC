@@ -11,9 +11,8 @@ constexpr int ZkClientPool::kConnectionMaxAgeMs;
 ZkClientPool::ZkClientPool()
     : m_running(false), m_healthCheckThread(nullptr)
 {
-    // 从配置读取 ZooKeeper 地址
-    auto &config = XrpcApplication::GetInstance().GetConfig();
-    m_zkHost = config.Load("zookeeperip") + ":" + config.Load("zookeeperport");
+    // m_zkHost 推迟到 start() 时再读，避免在 XrpcApplication::Init 之前
+    // 触发单例构造造成 m_zkHost 残留为 ":" 的问题。
 }
 
 ZkClientPool::~ZkClientPool()
@@ -38,6 +37,10 @@ void ZkClientPool::start(int initialSize)
     }
 
     m_running = true;
+
+    // 延迟读取配置：保证 XrpcApplication::Init 已加载完毕
+    auto &config = XrpcApplication::GetInstance().GetConfig();
+    m_zkHost = config.Load("zookeeperip") + ":" + config.Load("zookeeperport");
 
     // 预创建初始连接
     int count = std::min(static_cast<size_t>(initialSize), kMaxPoolSize);

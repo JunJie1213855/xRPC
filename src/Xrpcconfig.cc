@@ -1,4 +1,5 @@
 #include "Xrpcconfig.h"
+#include "XrpcLogger.h"
 #include "memory"
 
 // 加载配置文件，解析配置文件中的键值对
@@ -11,8 +12,12 @@ void Xrpcconfig::LoadConfigFile(const char *config_file)
     );
 
     if (pf == nullptr)
-    {                       // 如果文件打开失败
-        exit(EXIT_FAILURE); // 退出程序
+    {
+        // 文件不存在或无法读取：仅记录错误，由调用方决定如何处理
+        // （不再 exit()，否则单元测试无法覆盖此分支）
+        LOG(ERROR) << "config file open failed: "
+                   << (config_file ? config_file : "<null>");
+        return;
     }
 
     char buf[1024]; // 用于存储从文件中读取的每一行内容

@@ -1,0 +1,226 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------
+  # Job 1: 构建 + 单元测试（不依赖 ZooKeeper，跑得快）
+  # ---------------------------------------------------------------
+  unit:
+    name: Build + Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            g++-13 \
+            libasio-dev \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libzookeeper-mt-dev \
+            libgoogle-glog-dev \
+            libgtest-dev \
+            libgmock-dev
+
+      - name: Show toolchain versions
+        run: |
+          g++-13 --version
+          cmake --version
+          protoc --version
+
+      - name: Generate protobuf sources
+        run: |
+          cd src && protoc --cpp_out=. Xrpcheader.proto
+          cd ../example && protoc --cpp_out=. user.proto
+
+      - name: Configure
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run unit tests
+        working-directory: build
+        run: ctest --output-on-failure -L unit --timeout 60
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-logs
+          path: |
+            build/Testing/Temporary/
+            build/tests/*.log
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------
+  # Job 2: 构建 + 集成测试（带 ZooKeeper service container）
+  # ---------------------------------------------------------------
+  integration:
+    name: Build + Integration Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: unit  # 单元测试通过后再跑
+
+    services:
+      zookeeper:
+        image: zookeeper:3.9
+        ports:
+          - 2181:2181
+        options: >-
+          --health-cmd="echo ruok | nc -w 2 localhost 2181 | grep imok"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+          --health-start-period=5s
+
+    env:
+      XRPC_ZK_HOST: 127.0.0.1:2181
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            g++-13 \
+            libasio-dev \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libzookeeper-mt-dev \
+            libgoogle-glog-dev \
+            libgtest-dev \
+            libgmock-dev \
+            netcat-openbsd
+
+      - name: Wait for ZooKeeper
+        run: |
+          for i in {1..30}; do
+            if echo ruok | nc -w 2 127.0.0.1 2181 | grep -q imok; then
+              echo "ZooKeeper is up"
+              exit 0
+            fi
+            echo "waiting for zk ($i/30)..."
+            sleep 2
+          done
+          echo "ZooKeeper did not come up in time"
+          exit 1
+
+      - name: Generate protobuf sources
+        run: |
+          cd src && protoc --cpp_out=. Xrpcheader.proto
+          cd ../example && protoc --cpp_out=. user.proto
+
+      - name: Configure
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run all tests (unit + integration)
+        working-directory: build
+        env:
+          XRPC_ZK_HOST: 127.0.0.1:2181
+        run: ctest --output-on-failure --timeout 180
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            build/Testing/Temporary/
+            build/tests/*.log
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------
+  # Job 3: ASan / UBSan 烟雾测试（catch UB / leaks）
+  # ---------------------------------------------------------------
+  sanitizers:
+    name: Build + Sanitizers (ASAN/UBSAN)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: unit
+
+    services:
+      zookeeper:
+        image: zookeeper:3.9
+        ports:
+          - 2181:2181
+        options: >-
+          --health-cmd="echo ruok | nc -w 2 localhost 2181 | grep imok"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+          --health-start-period=5s
+
+    env:
+      XRPC_ZK_HOST: 127.0.0.1:2181
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build g++-13 \
+            libasio-dev libprotobuf-dev protobuf-compiler \
+            libzookeeper-mt-dev libgoogle-glog-dev \
+            libgtest-dev libgmock-dev netcat-openbsd
+
+      - name: Generate protobuf sources
+        run: |
+          cd src && protoc --cpp_out=. Xrpcheader.proto
+          cd ../example && protoc --cpp_out=. user.proto
+
+      - name: Configure with sanitizers
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run unit tests under sanitizers
+        working-directory: build
+        run: ctest --output-on-failure -L unit --timeout 120
+
+      - name: Run integration tests under sanitizers
+        working-directory: build
+        run: ctest --output-on-failure -L integration --timeout 240

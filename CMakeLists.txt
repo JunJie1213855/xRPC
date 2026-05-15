@@ -26,6 +26,9 @@ set(LIBS
     zookeeper_mt
     glog
 )
+# 启用 ctest（必须在顶层 CMakeLists.txt，否则子目录里 add_test 不会被 ctest 发现）
+enable_testing()
+
 #添加子目录
 add_subdirectory(src)
 add_subdirectory(example)
