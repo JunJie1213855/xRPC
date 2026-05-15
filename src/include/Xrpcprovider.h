@@ -1,50 +1,73 @@
 #ifndef _Xrpcprovider_H__
 #define _Xrpcprovider_H__
-#include "google/protobuf/service.h"
-#include <muduo/net/TcpServer.h>
-#include <muduo/net/EventLoop.h>
-#include <muduo/net/InetAddress.h>
-#include <muduo/net/TcpConnection.h>
+
 #include <google/protobuf/descriptor.h>
-#include <functional>
+#include <google/protobuf/service.h>
+
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
+
+#include <asio/awaitable.hpp>
+#include <asio/executor_work_guard.hpp>
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+
 /**
- * @brief 该类用于注册服务，处理客户端的请求
- * 1.服务注册：根据当前服务类提供的名称和方法，将其注册到ZooKeeper中，具体来说 节点 ZNode = /${service}/${method}，节点的值为 ${ip}:${port}
- * 2.接收请求：接收客户端的请求包，将其解包 = 包大小 + 头长度 + 头数据 + 参数数据，其中头数据包含服务名称和方法名称，通过服务名称和方法名称，到具体的服务类上执行方法
- * 3.
+ * @brief 服务端 RPC 提供者，使用 standalone asio + C++20 协程实现。
+ *  1. 服务注册：将每个服务的 service/method 节点写入 ZooKeeper，节点值为 ip:port。
+ *  2. 接收请求：协程读取 [4B total_len][4B header_len][header][args] 帧，
+ *     解析 RpcHeader 找到 service+method，调用对应实现，再回写 [4B resp_len][resp]。
+ *  3. 线程模型：1 个 acceptor io_context + N 个 worker io_context（子 reactor 风格），
+ *     新连接 round-robin 分发到 worker，会话内部天然串行执行。
  */
 class XrpcProvider
 {
-
-private:
-    // 服务信息
-    struct ServiceInfo
-    {
-        google::protobuf::Service *service; // 服务基类指针，会指向派生类，用于调用其指定服务
-        std::unordered_map<std::string, const google::protobuf::MethodDescriptor *> method_map; // 方法和方向描述的映射
-    };
-
 public:
-    // 这里是提供给外部使用的，可以发布rpc方法的函数接口。
-    void NotifyService(google::protobuf::Service *service);
-    // 析构清理资源
+    XrpcProvider() = default;
     ~XrpcProvider();
-    // 启动rpc服务节点，开始提供rpc远程网络调用服务
+
+    XrpcProvider(const XrpcProvider &) = delete;
+    XrpcProvider &operator=(const XrpcProvider &) = delete;
+
+    // 注册服务对象及其方法
+    void NotifyService(google::protobuf::Service *service);
+
+    // 启动 RPC 服务节点，阻塞到 io_context 退出
     void Run();
 
 private:
-    // 连接回调， 客户端的连接
-    void OnConnection(const muduo::net::TcpConnectionPtr &conn);
-    // 消息回调
-    void OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net::Buffer *buffer, muduo::Timestamp receive_time);
-    // 返回Rpc响应
-    void SendRpcResponse(const muduo::net::TcpConnectionPtr &conn, google::protobuf::Message *response);
+    struct ServiceInfo
+    {
+        google::protobuf::Service *service;
+        std::unordered_map<std::string, const google::protobuf::MethodDescriptor *> method_map;
+    };
 
-private:
-    muduo::net::EventLoop event_loop;
+    // worker io_context 数量（对齐原 muduo setThreadNum(4)）
+    static constexpr std::size_t kWorkerCount = 4;
 
-    std::unordered_map<std::string, ServiceInfo> service_map; // 保存服务对象和rpc方法
+    using WorkGuard = asio::executor_work_guard<asio::io_context::executor_type>;
+
+    // 协程：在 acceptor io_context 上 accept 新连接并 round-robin 分发到 worker
+    asio::awaitable<void> AcceptLoop(std::string ip, uint16_t port);
+
+    // 协程：单个连接的会话循环（读帧 → 派发 → 回包）
+    asio::awaitable<void> Session(asio::ip::tcp::socket sock);
+
+    // 注册 service_map 中的服务到 ZooKeeper（沿用原同步逻辑）
+    bool RegisterToZookeeper(const std::string &ip, uint16_t port);
+
+    std::unordered_map<std::string, ServiceInfo> service_map;
+
+    std::unique_ptr<asio::io_context> acceptor_ioc_;
+    std::array<std::unique_ptr<asio::io_context>, kWorkerCount> workers_;
+    std::array<std::unique_ptr<WorkGuard>, kWorkerCount> guards_;
+    std::array<std::thread, kWorkerCount> worker_threads_;
+    std::atomic<std::size_t> next_worker_{0};
 };
+
 #endif

@@ -1,13 +1,16 @@
 #设置最低版本和项目名称
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 4.0)
 project(Xrpc)
 
-#设置全局的C++标准
-set(CMAKE_CXX_STANDARD 14)#在这里我设置了11，代表使用c++11标准
+#设置全局的C++标准（asio 协程需要 C++20）
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)#CMAKE_CXX_STANDARD_REQUIRED表示强制使用指定的标准
 
 # ZooKeeper多线程版本需要THREADED定义
 add_definitions(-DTHREADED)
+
+# 使用 standalone asio（非 Boost.Asio）
+add_definitions(-DASIO_STANDALONE)
 
 #设置头文件目录，供所有子项目使用
 #include_directories(${CMAKE_SOURCE_DIR}/src/include) #其中CMAKE_SOURCE_DIR表示当前目录
@@ -16,13 +19,11 @@ add_definitions(-DTHREADED)
 find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})#Protobuf_INCLUDE_DIRS表示protobuf头文件目录
 
-#设置全局链接库
+#设置全局链接库（已从 muduo 迁移至 standalone asio header-only，不再链接 muduo）
 set(LIBS
     protobuf
     pthread
     zookeeper_mt
-    muduo_net
-    muduo_base
     glog
 )
 #添加子目录

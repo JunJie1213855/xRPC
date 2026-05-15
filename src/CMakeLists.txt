@@ -21,4 +21,4 @@ target_link_libraries(xrpc_core PUBLIC protobuf)
 target_include_directories(xrpc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 添加编译选项
-target_compile_options(xrpc_core PRIVATE -std=c++11 -Wall)
+target_compile_options(xrpc_core PRIVATE -Wall)

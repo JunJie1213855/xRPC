@@ -15,10 +15,10 @@ set(TEST_SOURCES
 # 创建测试可执行文件
 add_executable(zk_test ${TEST_SOURCES})
 
-# 使用系统自带的 GTest
+# 使用 /usr/local 下的 GTest（系统 gtest 已被删除）
 target_link_libraries(zk_test
-    /usr/lib/x86_64-linux-gnu/libgtest.a
-    /usr/lib/x86_64-linux-gnu/libgtest_main.a
+    /usr/local/lib/libgtest.a
+    /usr/local/lib/libgtest_main.a
     xrpc_core
     pthread
     zookeeper_mt
@@ -28,7 +28,6 @@ target_link_libraries(zk_test
 # 设置包含目录
 target_include_directories(zk_test PRIVATE
     ${CMAKE_SOURCE_DIR}/src/include
-    /usr/include
 )
 
 # 注册测试
