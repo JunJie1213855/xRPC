@@ -1,6 +1,8 @@
 #设置最低版本和项目名称
-cmake_minimum_required(VERSION 4.0)
-project(Xrpc)
+# 3.20 已支持 C++20 标准与现代 generator expressions；
+# 不需要 CMake 4.x，因此把下限调低以匹配 Ubuntu 24.04 自带 3.28+ / GH Actions runner 上的 cmake。
+cmake_minimum_required(VERSION 3.20)
+project(Xrpc CXX)
 
 #设置全局的C++标准（asio 协程需要 C++20）
 set(CMAKE_CXX_STANDARD 20)
