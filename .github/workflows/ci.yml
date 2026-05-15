@@ -86,12 +86,13 @@ jobs:
         image: zookeeper:3.9
         ports:
           - 2181:2181
-        options: >-
-          --health-cmd="echo ruok | nc -w 2 localhost 2181 | grep imok"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=10
-          --health-start-period=5s
+        env:
+          # 官方 zookeeper:3.9 默认只允许 `srvr` 这一个 4lw 命令；
+          # 这里显式打开 ruok 与 stat，方便后续步骤在 runner 侧探测可用性。
+          ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok,stat,mntr,conf"
+        # 注意：不在这里写 --health-cmd。zookeeper:3.9 镜像不带 nc/curl，
+        # 容器内的 health 探测会一直失败导致 service 被标记为 unhealthy。
+        # 改为下文 Wait for ZooKeeper 步骤在 runner 侧 (已装 netcat-openbsd) 进行探测。
 
     env:
       XRPC_ZK_HOST: 127.0.0.1:2181
@@ -174,12 +175,13 @@ jobs:
         image: zookeeper:3.9
         ports:
           - 2181:2181
-        options: >-
-          --health-cmd="echo ruok | nc -w 2 localhost 2181 | grep imok"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=10
-          --health-start-period=5s
+        env:
+          # 官方 zookeeper:3.9 默认只允许 `srvr` 这一个 4lw 命令；
+          # 这里显式打开 ruok 与 stat，方便后续步骤在 runner 侧探测可用性。
+          ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok,stat,mntr,conf"
+        # 注意：不在这里写 --health-cmd。zookeeper:3.9 镜像不带 nc/curl，
+        # 容器内的 health 探测会一直失败导致 service 被标记为 unhealthy。
+        # 改为下文 Wait for ZooKeeper 步骤在 runner 侧 (已装 netcat-openbsd) 进行探测。
 
     env:
       XRPC_ZK_HOST: 127.0.0.1:2181
@@ -198,6 +200,19 @@ jobs:
             libasio-dev libprotobuf-dev protobuf-compiler \
             libzookeeper-mt-dev libgoogle-glog-dev \
             libgtest-dev libgmock-dev netcat-openbsd
+
+      - name: Wait for ZooKeeper
+        run: |
+          for i in {1..30}; do
+            if echo ruok | nc -w 2 127.0.0.1 2181 | grep -q imok; then
+              echo "ZooKeeper is up"
+              exit 0
+            fi
+            echo "waiting for zk ($i/30)..."
+            sleep 2
+          done
+          echo "ZooKeeper did not come up in time"
+          exit 1
 
       - name: Generate protobuf sources
         run: |
