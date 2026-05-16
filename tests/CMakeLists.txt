@@ -37,8 +37,8 @@ target_link_libraries(xrpc_unit_test
     xrpc_core
     pthread
     zookeeper_mt
-    glog
-    protobuf
+    spdlog::spdlog
+    PkgConfig::PROTOBUF
 )
 target_include_directories(xrpc_unit_test PRIVATE
     ${CMAKE_SOURCE_DIR}/src/include
@@ -62,8 +62,8 @@ target_link_libraries(xrpc_integration_test
     xrpc_core
     pthread
     zookeeper_mt
-    glog
-    protobuf
+    spdlog::spdlog
+    PkgConfig::PROTOBUF
 )
 target_include_directories(xrpc_integration_test PRIVATE
     ${CMAKE_SOURCE_DIR}/src/include

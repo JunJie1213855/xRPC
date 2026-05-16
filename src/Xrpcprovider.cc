@@ -37,14 +37,14 @@ void XrpcProvider::NotifyService(google::protobuf::Service *service)
     ServiceInfo service_info;
 
     const google::protobuf::ServiceDescriptor *psd = service->GetDescriptor();
-    std::string service_name = psd->name();
+    std::string_view service_name = psd->name();
     int method_count = psd->method_count();
 
     LOG(INFO) << "service_name=" << service_name;
     for (int i = 0; i < method_count; ++i)
     {
         const google::protobuf::MethodDescriptor *pmd = psd->method(i);
-        std::string method_name = pmd->name();
+        std::string_view method_name = pmd->name();
         LOG(INFO) << "method_name=" << method_name;
         service_info.method_map.emplace(method_name, pmd);
     }
