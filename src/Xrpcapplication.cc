@@ -51,6 +51,8 @@ void XrpcApplication::Init(int argc, char **argv)
     // 加载配置文件
     m_config.LoadConfigFile(config_file.c_str());
 
+    // debug默认级别
+    zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
     // 启动 ZooKeeper 连接池
     ZkClientPool::getInstance().start(4);
 }
